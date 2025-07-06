@@ -8,7 +8,7 @@ CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 # Liste des adresses BTC à surveiller (corrigées)
 ADDRESSES = [
-    "bc1qmnjn0l0kdf3m3d8khc6cukj8deak8z24g",
+    "bc1qmnjn0l0kdf3m3d8khc6cukj8deakg8m588z24g",
     "bc1qymu2qf0d23qg38p9w7yxxt4yqjjg47rytxujl6",
     "bc1qnzy2rr7g3688x62f8vrhgeclvtcs5hr50wzu0w",
     "bc1q2lkyqvqqwus9pl96krgtk4rh0fqu8gtmpuwgmc",
