@@ -1,52 +1,68 @@
+import os
 import time
 import requests
-import os
 from telegram import Bot
 
-# === CONFIGURATION ===
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")  # ou remplace par ton token en dur
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")  # ou remplace par ton chat_id
-BTC_ADDRESS = "bc1qmnjn0l0kdf3m3d8khc6cukj8deak8z24g"
-CHECK_INTERVAL = 60  # en secondes
+# === CONFIG ===
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+
+ADDRESSES = [
+    "bc1qmnjn0l0kdf3m3d8khc6cukj8deak8z24g",
+    "bc1qg7dy3upmf0qdsf52y27gzvh2zh6zwqg5w9u7n6",
+    "bc1q2ehxfguefcak9lvu35xmqwwll7q8cftq6cd5fc",
+    "bc1q62l42z0x6eqwyf5ygp9gnjvdf2pw0dgyk32cwg",
+    "bc1q4vwuhx5wnqswmvmt9fvkywgt35gf8jgmf5qfdc",
+    "bc1q3um4f9eyxey8ue26nldm97qh9pk3fvkr76e80g",
+    "bc1q8lvkr7wklv2t5sg9a5qpevmvh6ur4x74ylgnmn",
+    "bc1qvzk67qcdmj3c3tw7tg9hq6m3a6xfgs7k7rhjdy"
+]
+
+CHECK_INTERVAL = 60  # secondes
 
 bot = Bot(token=TELEGRAM_TOKEN)
 
-# === UTILITAIRE ===
-def get_latest_txids(address):
-    url = f"https://blockstream.info/api/address/{address}/txs/chain"
+seen_txids = {addr: set() for addr in ADDRESSES}
+
+def get_transactions(address):
     try:
+        url = f"https://blockstream.info/api/address/{address}/txs"
         response = requests.get(url, timeout=10)
         response.raise_for_status()
-        txs = response.json()
-        return [tx["txid"] for tx in txs]
+        return response.json()
     except Exception as e:
-        print(f"[ERREUR API] {e}")
-        return None
+        print(f"[API ERROR] {address} : {e}")
+        return []
 
-# === BOUCLE PRINCIPALE ===
-def main():
-    print("🎯 Lancement de la surveillance de l’adresse BTC...")
-    last_seen_txids = get_latest_txids(BTC_ADDRESS)
-    if last_seen_txids is None:
-        print("❌ Impossible d'obtenir les transactions initiales.")
-        return
+def notify(tx, address):
+    txid = tx["txid"]
+    link = f"https://blockstream.info/tx/{txid}"
+    msg = f"🚨 Sortie BTC détectée !\nAdresse : `{address}`\nTxID : `{txid}`\n🔗 {link}"
+    try:
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg, parse_mode="Markdown")
+        print(f"[ALERTE] Envoyée : {txid}")
+    except Exception as e:
+        print(f"[TELEGRAM ERROR] {e}")
 
-    while True:
-        time.sleep(CHECK_INTERVAL)
-        current_txids = get_latest_txids(BTC_ADDRESS)
-        if current_txids is None:
-            print("⚠️ Erreur API temporaire, on réessaie au prochain tour.")
+def check_address(address):
+    txs = get_transactions(address)
+    for tx in txs:
+        txid = tx["txid"]
+        if txid in seen_txids[address]:
             continue
+        seen_txids[address].add(txid)
 
-        new_txids = [txid for txid in current_txids if txid not in last_seen_txids]
-        if new_txids:
-            for txid in new_txids:
-                message = f"💰 Nouvelle transaction détectée sur l’adresse BTC :\nhttps://blockstream.info/tx/{txid}"
-                bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-                print(f"[✔️] Notification envoyée pour la transaction {txid}")
-            last_seen_txids = current_txids
-        else:
-            print("🔍 Aucune nouvelle transaction détectée.")
+        for vin in tx.get("vin", []):
+            if vin.get("prevout", {}).get("scriptpubkey_address") == address:
+                notify(tx, address)
+                break
+
+def main():
+    print("🟢 Surveillance BTC active sur Railway")
+    while True:
+        for address in ADDRESSES:
+            check_address(address)
+        time.sleep(CHECK_INTERVAL)
 
 if __name__ == "__main__":
     main()
