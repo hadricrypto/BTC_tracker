@@ -2,9 +2,11 @@ import requests
 import time
 import os
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+# Variables d’environnement
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
+# 8 adresses BTC à surveiller
 ADDRESSES = [
     "bc1qmnjn0l0kdf3m3d8khc6cukj8deak8z24g",
     "bc1qylg06gsplwqgtxcr7f45klzcp9jk6v63enpn7j",
@@ -19,23 +21,26 @@ ADDRESSES = [
 seen_txids = set()
 
 def send_telegram_alert(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message
-    }
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": message}
     try:
-        response = requests.post(url, data=payload)
-        if not response.ok:
-            print(f"Erreur Telegram: {response.text}")
+        r = requests.post(url, json=payload)
+        print(f"Télégram → {r.status_code}")
     except Exception as e:
-        print(f"Erreur lors de l'envoi Telegram : {e}")
+        print(f"Erreur Telegram : {e}")
 
 def check_transactions():
     for address in ADDRESSES:
         try:
-            url = f"https://blockstream.info/api/address/{address}/txs"
+            url = f"https://mempool.space/api/address/{address}/txs"
             res = requests.get(url, timeout=10)
+
+            print(f"→ {address} : {res.status_code}")
+
+            if res.status_code != 200:
+                print(f"Contenu : {res.text}")
+                continue
+
             txs = res.json()
 
             for tx in txs:
@@ -45,7 +50,7 @@ def check_transactions():
 
                 for vin in tx.get("vin", []):
                     if "prevout" in vin and vin["prevout"].get("scriptpubkey_address") == address:
-                        msg = f"📤 Sortie BTC détectée depuis {address}\n🔗 TX : https://blockstream.info/tx/{txid}"
+                        msg = f"📤 Sortie BTC détectée depuis {address}\n🔗 https://mempool.space/tx/{txid}"
                         send_telegram_alert(msg)
                         break
 
@@ -55,6 +60,7 @@ def check_transactions():
             print(f"Erreur pour {address} : {e}")
 
 if __name__ == "__main__":
+    print("🎯 Démarrage de la surveillance...")
     while True:
         check_transactions()
-        time.sleep(60)
+        time.sleep(60)  # Vérifie toutes les 60 secondes
