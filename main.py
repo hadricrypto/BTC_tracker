@@ -6,16 +6,15 @@ import os
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-# 8 adresses BTC à surveiller
+# Adresses BTC à surveiller (toutes valides)
 ADDRESSES = [
-    "bc1qmnjn0l0kdf3m3d8khc6cukj8deak8z24g",
-    "bc1qylg06gsplwqgtxcr7f45klzcp9jk6v63enpn7j",
-    "bc1qqaqnhs4kcdgkztsvm3ry7ph8t9c2ysqjmuymqj",
-    "bc1q9kfvq7dxyl3vd0hz4st9xmd26ydcxtcwklc3qv",
-    "bc1qyyq67q3lwsrm2j5tpw2mvzujctgh0wq3p4ad0r",
-    "bc1qth08spwknh3gw0upzuywtky7ly9ef4z6pjzlh6",
-    "bc1q0pghnphf7vqyz7pkaz7qkysccrflg9zz8t70yx",
-    "bc1q9x2rt34y37y2gkycux4hnmfywm7t3cv6vw4tdf"
+    "bc1qymu2qf0d23qg38p9w7yxxt4yqjjg47rytxujl6",
+    "bc1qnzy2rr7g3688x62f8vrhgeclvtcs5hr50wzu0w",
+    "bc1q2lkyqvqqwus9pl96krgtk4rh0fqu8gtmpuwgmc",
+    "bc1qhtawge4km6juhlkrnvt7qjahhsc96qdlgf3c8t",
+    "bc1q84w6epn6uce9s85slt7q6emm3qfzz7ngq7ef6k",
+    "bc1qwq5geath93h0lnfsrmnwnfuck2f9ypv4ewyl4j",
+    "1GcCK347TMbzHrRpDoVvJdR6eyECyqHCiU"
 ]
 
 seen_txids = set()
@@ -25,26 +24,31 @@ def send_telegram_alert(message):
     payload = {"chat_id": CHAT_ID, "text": message}
     try:
         r = requests.post(url, json=payload)
-        print(f"Télégram → {r.status_code}")
+        print(f"📨 Télégram : {r.status_code}")
     except Exception as e:
-        print(f"Erreur Telegram : {e}")
+        print(f"❌ Erreur Telegram : {e}")
 
 def check_transactions():
     for address in ADDRESSES:
         try:
-            url = f"https://mempool.space/api/address/{address}/txs/chain"  # <- Correction ici
+            url = f"https://mempool.space/api/address/{address}/txs"
             res = requests.get(url, timeout=10)
 
-            print(f"→ {address} : {res.status_code}")
+            print(f"🔍 {address} → {res.status_code}")
+
+            if res.status_code == 400 and "Invalid Bitcoin address" in res.text:
+                print(f"❌ Adresse invalide détectée : {address}")
+                send_telegram_alert(f"⚠️ Adresse invalide détectée : {address}")
+                continue
 
             if res.status_code != 200:
-                print(f"Contenu brut (100 premiers caractères) : {res.text[:100]}")  # debug
+                print(f"⚠️ Contenu brut : {res.text[:100]}")
                 continue
 
             txs = res.json()
 
             if not txs:
-                print(f"Aucune transaction trouvée pour {address}.")
+                print(f"ℹ️ Aucune transaction pour {address}.")
                 continue
 
             for tx in txs:
@@ -61,10 +65,10 @@ def check_transactions():
                 seen_txids.add(txid)
 
         except Exception as e:
-            print(f"Erreur pour {address} : {e}")
+            print(f"❗ Erreur pour {address} : {e}")
 
 if __name__ == "__main__":
-    print("🎯 Démarrage de la surveillance...")
+    print("🎯 Démarrage de la surveillance des transactions BTC...")
     while True:
         check_transactions()
-        time.sleep(60)  # Vérifie toutes les 60 secondes
+        time.sleep(60)  # Pause de 60 secondes
