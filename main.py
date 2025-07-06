@@ -1,4 +1,5 @@
 import time
+import asyncio
 import requests
 from telegram import Bot
 
@@ -19,17 +20,16 @@ CHAT_ID = "TON_CHAT_ID_TELEGRAM"
 CHECK_INTERVAL = 60  # en secondes
 
 bot = Bot(token=BOT_TOKEN)
+seen_txids = set()
 
-def send_alert(message: str):
+async def send_alert(message: str):
     try:
-        bot.send_message(chat_id=CHAT_ID, text=message)
+        await bot.send_message(chat_id=CHAT_ID, text=message)
         print(f"[ALERTE] {message}")
     except Exception as e:
         print(f"[ERREUR TELEGRAM] {e}")
 
-def check_transactions():
-    seen_txids = set()
-
+async def check_transactions():
     for address in WATCHED_ADDRESSES:
         url = f"https://blockstream.info/api/address/{address}/txs"
         try:
@@ -50,7 +50,7 @@ def check_transactions():
                     from_addr = vin.get("prevout", {}).get("scriptpubkey_address")
                     value = vin.get("prevout", {}).get("value", 0) / 1e8
                     if from_addr in WATCHED_ADDRESSES and value >= 1:
-                        send_alert(f"🔴 Départ de {value:.2f} BTC depuis {from_addr}\n➡️ https://mempool.space/tx/{txid}")
+                        await send_alert(f"🔴 Départ de {value:.2f} BTC depuis {from_addr}\n➡️ https://mempool.space/tx/{txid}")
 
                 # Sorties (vout)
                 destinations = set()
@@ -62,7 +62,7 @@ def check_transactions():
                     if script_type != "op_return" and to_addr:
                         destinations.add(to_addr)
                         if to_addr in WATCHED_ADDRESSES and value >= 1:
-                            send_alert(f"🟢 Arrivée de {value:.2f} BTC vers {to_addr}\n➡️ https://mempool.space/tx/{txid}")
+                            await send_alert(f"🟢 Arrivée de {value:.2f} BTC vers {to_addr}\n➡️ https://mempool.space/tx/{txid}")
 
                 # OP_RETURN
                 source_addresses = {
@@ -74,12 +74,15 @@ def check_transactions():
                     if vout.get("scriptpubkey_type") == "op_return":
                         if WATCHED_ADDRESSES & all_addresses:
                             data_hex = vout.get("scriptpubkey", "")
-                            send_alert(f"📦 OP_RETURN détecté : {data_hex}\n➡️ https://mempool.space/tx/{txid}")
+                            await send_alert(f"📦 OP_RETURN détecté : {data_hex}\n➡️ https://mempool.space/tx/{txid}")
 
         except Exception as e:
             print(f"[ERREUR] {e}")
 
-if __name__ == "__main__":
+async def main_loop():
     while True:
-        check_transactions()
-        time.sleep(CHECK_INTERVAL)
+        await check_transactions()
+        await asyncio.sleep(CHECK_INTERVAL)
+
+if __name__ == "__main__":
+    asyncio.run(main_loop())
