@@ -1,88 +1,52 @@
 import time
-import asyncio
 import requests
+import os
 from telegram import Bot
 
-# === Configuration ===
-WATCHED_ADDRESSES = {
-    "bc1qmnjn0l0kdf3m3d8khc6cukj8deak8z24g",
-    "bc1qymu2qf0d23qg38p9w7yxxt4yqjjg47rytxujl6",
-    "bc1qnzy2rr7g3688x62f8vrhgeclvtcs5hr50wzu0w",
-    "bc1q2lkyqvqqwus9pl96krgtk4rh0fqu8gtmpuwgmc",
-    "bc1qhtawge4km6juhlkrnvt7qjahhsc96qdlgf3c8t",
-    "bc1q84w6epn6uce9s85slt7q6emm3qfzz7ngq7ef6k",
-    "bc1qwq5geath93h0lnfsrmnwnfuck2f9ypv4ewyl4j",
-    "1GcCK347TMbzHrRpDoVvJdR6eyECyqHCiU"
-}
-
-BOT_TOKEN = "TON_BOT_TOKEN_TELEGRAM"
-CHAT_ID = "TON_CHAT_ID_TELEGRAM"
+# === CONFIGURATION ===
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")  # ou remplace par ton token en dur
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")  # ou remplace par ton chat_id
+BTC_ADDRESS = "bc1qmnjn0l0kdf3m3d8khc6cukj8deak8z24g"
 CHECK_INTERVAL = 60  # en secondes
 
-bot = Bot(token=BOT_TOKEN)
-seen_txids = set()
+bot = Bot(token=TELEGRAM_TOKEN)
 
-async def send_alert(message: str):
+# === UTILITAIRE ===
+def get_latest_txids(address):
+    url = f"https://blockstream.info/api/address/{address}/txs/chain"
     try:
-        await bot.send_message(chat_id=CHAT_ID, text=message)
-        print(f"[ALERTE] {message}")
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        txs = response.json()
+        return [tx["txid"] for tx in txs]
     except Exception as e:
-        print(f"[ERREUR TELEGRAM] {e}")
+        print(f"[ERREUR API] {e}")
+        return None
 
-async def check_transactions():
-    for address in WATCHED_ADDRESSES:
-        url = f"https://blockstream.info/api/address/{address}/txs"
-        try:
-            response = requests.get(url)
-            if response.status_code != 200:
-                print(f"[ERREUR API] {url}")
-                continue
+# === BOUCLE PRINCIPALE ===
+def main():
+    print("🎯 Lancement de la surveillance de l’adresse BTC...")
+    last_seen_txids = get_latest_txids(BTC_ADDRESS)
+    if last_seen_txids is None:
+        print("❌ Impossible d'obtenir les transactions initiales.")
+        return
 
-            txs = response.json()
-            for tx in txs:
-                txid = tx.get("txid")
-                if txid in seen_txids:
-                    continue
-                seen_txids.add(txid)
-
-                # Entrées (vin)
-                for vin in tx.get("vin", []):
-                    from_addr = vin.get("prevout", {}).get("scriptpubkey_address")
-                    value = vin.get("prevout", {}).get("value", 0) / 1e8
-                    if from_addr in WATCHED_ADDRESSES and value >= 1:
-                        await send_alert(f"🔴 Départ de {value:.2f} BTC depuis {from_addr}\n➡️ https://mempool.space/tx/{txid}")
-
-                # Sorties (vout)
-                destinations = set()
-                for vout in tx.get("vout", []):
-                    script_type = vout.get("scriptpubkey_type")
-                    to_addr = vout.get("scriptpubkey_address")
-                    value = vout.get("value", 0) / 1e8
-
-                    if script_type != "op_return" and to_addr:
-                        destinations.add(to_addr)
-                        if to_addr in WATCHED_ADDRESSES and value >= 1:
-                            await send_alert(f"🟢 Arrivée de {value:.2f} BTC vers {to_addr}\n➡️ https://mempool.space/tx/{txid}")
-
-                # OP_RETURN
-                source_addresses = {
-                    vin.get("prevout", {}).get("scriptpubkey_address")
-                    for vin in tx.get("vin", [])
-                }
-                all_addresses = source_addresses.union(destinations)
-                for vout in tx.get("vout", []):
-                    if vout.get("scriptpubkey_type") == "op_return":
-                        if WATCHED_ADDRESSES & all_addresses:
-                            data_hex = vout.get("scriptpubkey", "")
-                            await send_alert(f"📦 OP_RETURN détecté : {data_hex}\n➡️ https://mempool.space/tx/{txid}")
-
-        except Exception as e:
-            print(f"[ERREUR] {e}")
-
-async def main_loop():
     while True:
-        await check_transactions()
-        await asyncio.sleep(CHECK_INTERVAL)
+        time.sleep(CHECK_INTERVAL)
+        current_txids = get_latest_txids(BTC_ADDRESS)
+        if current_txids is None:
+            print("⚠️ Erreur API temporaire, on réessaie au prochain tour.")
+            continue
+
+        new_txids = [txid for txid in current_txids if txid not in last_seen_txids]
+        if new_txids:
+            for txid in new_txids:
+                message = f"💰 Nouvelle transaction détectée sur l’adresse BTC :\nhttps://blockstream.info/tx/{txid}"
+                bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+                print(f"[✔️] Notification envoyée pour la transaction {txid}")
+            last_seen_txids = current_txids
+        else:
+            print("🔍 Aucune nouvelle transaction détectée.")
 
 if __name__ == "__main__":
-    asyncio.run(main_loop())
+    main()
