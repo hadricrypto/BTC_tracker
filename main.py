@@ -32,13 +32,13 @@ def send_telegram_alert(message):
 def check_transactions():
     for address in ADDRESSES:
         try:
-            url = f"https://mempool.space/api/address/{address}/txs"
+            url = f"https://mempool.space/api/address/{address}/txs/chain"  # <- Correction ici
             res = requests.get(url, timeout=10)
 
             print(f"→ {address} : {res.status_code}")
 
             if res.status_code != 200:
-                print(f"Contenu : {res.text}")  # Affiche le contenu brut pour l'erreur
+                print(f"Contenu brut (100 premiers caractères) : {res.text[:100]}")  # debug
                 continue
 
             txs = res.json()
