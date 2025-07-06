@@ -38,10 +38,14 @@ def check_transactions():
             print(f"→ {address} : {res.status_code}")
 
             if res.status_code != 200:
-                print(f"Contenu : {res.text}")
+                print(f"Contenu : {res.text}")  # Affiche le contenu brut pour l'erreur
                 continue
 
             txs = res.json()
+
+            if not txs:
+                print(f"Aucune transaction trouvée pour {address}.")
+                continue
 
             for tx in txs:
                 txid = tx["txid"]
