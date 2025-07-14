@@ -16,6 +16,7 @@ ADDRESSES = [
     "bc1q84w6epn6uce9s85slt7q6emm3qfzz7ngq7ef6k",
     "bc1qwq5geath93h0lnfsrmnwnfuck2f9ypv4ewyl4j",
     "1GcCK347TMbzHrRpDoVvJdR6eyECyqHCiU"
+    "bc1qmuxrzvnx34j8y6h9leg4zen5gnw7wmfmgp8v2p"
 ]
 
 seen_txids = set()
